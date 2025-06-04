@@ -100,6 +100,7 @@ namespace GUI
             searchForm = new SearchForm();
 
             Settings.Load();
+            consoleTab.InitializeFont();
 
 #pragma warning disable WFO5001
             Application.SetColorMode(Settings.GetSystemColor());
@@ -112,9 +113,14 @@ namespace GUI
             HardwareAcceleratedTextureDecoder.Decoder = new GLTextureDecoder();
 
 #if DEBUG
+            var shadersMenuItem = new ToolStripMenuItem("Validate shaders");
+            shadersMenuItem.Click += OnValidateShadersToolStripMenuItem_Click;
+            fileToolStripMenuItem.DropDownItems.Add(shadersMenuItem);
+
             if (args.Length > 0 && args[0] == "validate_shaders")
             {
                 GUI.Types.Renderer.ShaderLoader.ValidateShaders();
+                Environment.Exit(0);
                 return;
             }
 #endif
@@ -155,6 +161,7 @@ namespace GUI
                         file = dirFile;
                     }
 
+                    file = Path.GetFullPath(file);
                     Log.Info(nameof(MainForm), $"Opening {file}");
 
                     var package = new Package();
@@ -212,6 +219,7 @@ namespace GUI
                     continue;
                 }
 
+                file = Path.GetFullPath(file);
                 OpenFile(file);
             }
 
@@ -756,9 +764,13 @@ namespace GUI
             {
                 return new Types.Viewers.NavView().Create(vrfGuiContext, stream);
             }
-            else if (Types.Viewers.BinaryKeyValues.IsAccepted(magic))
+            else if (Types.Viewers.BinaryKeyValues3.IsAccepted(magic))
             {
-                return new Types.Viewers.BinaryKeyValues().Create(vrfGuiContext, stream);
+                return new Types.Viewers.BinaryKeyValues3().Create(vrfGuiContext, stream);
+            }
+            else if (Types.Viewers.BinaryKeyValues2.IsAccepted(magic, vrfGuiContext.FileName))
+            {
+                return new Types.Viewers.BinaryKeyValues2().Create(vrfGuiContext, stream);
             }
             else if (Types.Viewers.BinaryKeyValues1.IsAccepted(magic))
             {
@@ -783,17 +795,35 @@ namespace GUI
             {
                 return new Types.Viewers.Audio().Create(vrfGuiContext, stream, isPreview);
             }
+            else if (Types.Viewers.GridNavFile.IsAccepted(magic))
+            {
+                return new Types.Viewers.GridNavFile().Create(vrfGuiContext, stream);
+            }
 
             return new Types.Viewers.ByteViewer().Create(vrfGuiContext, stream);
         }
 
         private void MainForm_DragDrop(object sender, DragEventArgs e)
         {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-
-            foreach (var fileName in files)
+            // Despite us setting drag effect only on FileDrop this can still be null on drop
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
             {
-                OpenFile(fileName);
+                foreach (var fileName in files)
+                {
+                    OpenFile(fileName);
+                }
+            }
+            else if (e.Data.GetData(DataFormats.UnicodeText) is string text) // Dropping files from web based apps such as VS code
+            {
+                foreach (var line in text.AsSpan().EnumerateLines())
+                {
+                    var fileName = line.ToString();
+
+                    if (File.Exists(fileName))
+                    {
+                        OpenFile(fileName);
+                    }
+                }
             }
         }
 

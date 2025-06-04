@@ -100,6 +100,7 @@ namespace ValveResourceFormat.ResourceTypes
 
         public Sentence Sentence { get; private set; }
 
+        public byte[] Header { get; private set; } = []; // Mostly for wave files
         public uint StreamingDataSize { get; private set; }
 
         private BinaryReader Reader => Resource.Reader;
@@ -151,11 +152,10 @@ namespace ValveResourceFormat.ResourceTypes
                 sentenceOffset = (uint)(reader.BaseStream.Position + sentenceOffset);
             }
 
-            // Skipping over m_pHeader
-            reader.BaseStream.Position += 4;
-
+            var headerSize = reader.ReadInt32();
             StreamingDataSize = reader.ReadUInt32();
 
+            // this is likely to be m_nSeekTable
             if (Resource.Version >= 1)
             {
                 var d = reader.ReadUInt32();
@@ -172,6 +172,7 @@ namespace ValveResourceFormat.ResourceTypes
             }
 
             // v2 and v3 are the same?
+            // this is likely to be CAudioMorphData
             if (Resource.Version >= 2)
             {
                 var f = reader.ReadUInt32();
@@ -184,6 +185,13 @@ namespace ValveResourceFormat.ResourceTypes
             if (Resource.Version >= 4)
             {
                 LoopEnd = reader.ReadInt32();
+            }
+
+            if (headerSize > 0)
+            {
+                Debug.Assert(AudioFormat == WaveAudioFormat.ADPCM);
+
+                Header = Reader.ReadBytes(headerSize);
             }
 
             ReadPhonemeStream(reader, sentenceOffset);
@@ -251,10 +259,11 @@ namespace ValveResourceFormat.ResourceTypes
 
                 case AudioFormatV4.ADPCM:
                     SoundType = AudioFileType.WAV;
-                    Bits = 4;
+                    Bits = 16;
                     SampleSize = 1;
                     AudioFormat = WaveAudioFormat.ADPCM;
-                    throw new NotImplementedException("ADPCM is currently not implemented correctly.");
+
+                    break;
 
                 default:
                     throw new UnexpectedMagicException("Unexpected audio type", (int)soundFormat, nameof(soundFormat));
@@ -340,10 +349,9 @@ namespace ValveResourceFormat.ResourceTypes
                 return new MemoryStream();
             }
 
-            Reader.BaseStream.Position = Offset + Size;
-
-            const int WaveHeaderSize = 44;
-            var totalSize = (int)StreamingDataSize + (SoundType == AudioFileType.WAV ? WaveHeaderSize : 0);
+            const int WaveHeaderSizeWithoutFmt = 28;
+            var waveHeaderSize = WaveHeaderSizeWithoutFmt + (AudioFormat == WaveAudioFormat.ADPCM ? Header.Length : 16);
+            var totalSize = (int)StreamingDataSize + (SoundType == AudioFileType.WAV ? waveHeaderSize : 0);
 
             var stream = new MemoryStream(capacity: totalSize);
 
@@ -351,31 +359,39 @@ namespace ValveResourceFormat.ResourceTypes
             {
                 // http://soundfile.sapp.org/doc/WaveFormat/
                 // http://www.codeproject.com/Articles/129173/Writing-a-Proper-Wave-File
+                // https://github.com/microsoft/DirectXTK/wiki/Wave-Formats
 
-                var byteRate = SampleRate * Channels * (Bits / 8);
-                var blockAlign = Channels * (Bits / 8);
+                stream.Write("RIFF"u8);
+                stream.Write(MemoryMarshal.AsBytes([totalSize - 8]));
+                stream.Write("WAVE"u8);
+                stream.Write("fmt "u8);
 
                 if (AudioFormat == WaveAudioFormat.ADPCM)
                 {
-                    byteRate = 1;
-                    blockAlign = 4;
+                    stream.Write(MemoryMarshal.AsBytes([Header.Length]));
+                    stream.Write(Header); // Quite likely to be ADPCMWAVEFORMAT
+                }
+                else
+                {
+                    var byteRate = SampleRate * Channels * (Bits / 8);
+                    var blockAlign = Channels * (Bits / 8);
+
+                    stream.Write(MemoryMarshal.AsBytes([16])); // size of PCMWAVEFORMAT
+
+                    // PCMWAVEFORMAT
+                    stream.Write(MemoryMarshal.AsBytes([(ushort)AudioFormat, (ushort)Channels]));
+                    stream.Write(MemoryMarshal.AsBytes([SampleRate, byteRate]));
+                    stream.Write(MemoryMarshal.AsBytes([(ushort)blockAlign, (ushort)Bits]));
                 }
 
-                stream.Write("RIFF"u8);
-                stream.Write(MemoryMarshal.AsBytes([StreamingDataSize + 42]));
-                stream.Write("WAVE"u8);
-                stream.Write("fmt "u8);
-                stream.Write(MemoryMarshal.AsBytes([16]));
-                stream.Write(MemoryMarshal.AsBytes([(ushort)AudioFormat, (ushort)Channels]));
-                stream.Write(MemoryMarshal.AsBytes([SampleRate, byteRate]));
-                stream.Write(MemoryMarshal.AsBytes([(ushort)blockAlign, (ushort)Bits]));
                 stream.Write("data"u8);
                 stream.Write(MemoryMarshal.AsBytes([StreamingDataSize]));
 
-                Debug.Assert(stream.Length == WaveHeaderSize);
+                Debug.Assert(stream.Length == waveHeaderSize);
             }
 
-            Reader.BaseStream.CopyTo(stream, (int)StreamingDataSize);
+            Reader.BaseStream.Position = Offset + Size;
+            Reader.BaseStream.CopyTo(stream);
             Debug.Assert(stream.Length == totalSize);
 
             // Flush and reset position so that consumers can read it

@@ -29,6 +29,7 @@ namespace GUI.Types.ParticleRenderer
 
         private readonly int InitialParticles;
         private readonly int MaxParticles;
+        private readonly float MaximumTimeStep;
 
         /// <summary>
         /// The particle bounds to use when calculating the bounding box of the particle system.
@@ -71,6 +72,7 @@ namespace GUI.Types.ParticleRenderer
             BehaviorVersion = parse.Int32("m_nBehaviorVersion", 13);
             InitialParticles = parse.Int32("m_nInitialParticles", 0);
             MaxParticles = parse.Int32("m_nMaxParticles", 1000);
+            MaximumTimeStep = parse.Float("m_flMaximumTimeStep", 0.1f);
 
             InfiniteBounds = parse.Boolean("m_bInfiniteBounds", false);
             ParticleBoundingBox = new AABB(
@@ -133,15 +135,16 @@ namespace GUI.Types.ParticleRenderer
             systemRenderState.ParticleCount += 1;
 
             // TODO: Make particle positions and control points local space
-            particleCollection.Initial[index].Position = MainControlPoint.Position;
+            particleCollection.Current[index] = particleCollection.Initial[index];
+
+            // Particle id must be set before initializing because the deterministic randomness uses particle ids
+            particleCollection.Current[index].ParticleID = particlesEmitted++;
+            particleCollection.Current[index].Position = MainControlPoint.Position;
 
             foreach (var initializer in Initializers)
             {
-                initializer.Initialize(ref particleCollection.Initial[index], systemRenderState);
+                initializer.Initialize(ref particleCollection.Current[index], systemRenderState);
             }
-
-            particleCollection.Current[index] = particleCollection.Initial[index];
-            particleCollection.Current[index].ParticleID = particlesEmitted++;
         }
 
         public void Stop()
@@ -176,6 +179,11 @@ namespace GUI.Types.ParticleRenderer
             {
                 Start();
                 hasStarted = true;
+            }
+
+            if (frameTime > MaximumTimeStep)
+            {
+                frameTime = MaximumTimeStep;
             }
 
             systemRenderState.Age += frameTime;

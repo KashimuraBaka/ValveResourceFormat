@@ -48,7 +48,7 @@ namespace GUI.Types.Renderer
         {
             LoadWorldLightingInfo();
 
-            scene.RenderAttributes.TryAdd("LightmapGameVersionNumber", (byte)scene.LightingInfo.LightmapGameVersionNumber);
+            scene.RenderAttributes.TryAdd("S_LIGHTMAP_VERSION_MINOR", (byte)scene.LightingInfo.LightmapGameVersionNumber);
 
             foreach (var lumpName in world.GetEntityLumpNames())
             {
@@ -577,6 +577,8 @@ namespace GUI.Types.Renderer
                             IndoorOutdoorLevel = indoorOutdoorLevel,
                         };
 
+                        lightProbe.VoxelSize = entity.GetPropertyUnchecked<float>("voxel_size");
+
                         var dliName = entity.GetProperty<string>("lightprobetexture_dli");
                         var dlsName = entity.GetProperty<string>("lightprobetexture_dls");
                         var dlsdName = entity.GetProperty<string>("lightprobetexture_dlshd");
@@ -958,6 +960,7 @@ namespace GUI.Types.Renderer
             }
 
             SkyboxScene = new Scene(guiContext);
+            SkyboxScene.LightingInfo.LightingData.IsSkybox = 1u;
 
             var skyboxResult = new WorldLoader((World)skyboxWorld.DataBlock, SkyboxScene);
 

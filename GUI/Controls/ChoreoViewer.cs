@@ -25,7 +25,7 @@ namespace GUI.Controls
             {
                 View = View.Details,
                 Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
-
+                Dock = DockStyle.Fill,
                 FullRowSelect = true,
                 MultiSelect = false,
                 ShowItemToolTips = true
@@ -43,7 +43,6 @@ namespace GUI.Controls
             }
 
             AddControl(fileListView);
-            fileListView.Dock = DockStyle.Fill;
         }
 
         private void AddListItem(int? index, string name, int version)
@@ -58,11 +57,6 @@ namespace GUI.Controls
             item.SubItems.Add(versionString);
 
             item.Tag = index;
-        }
-
-        protected override void InitLayout()
-        {
-            base.InitLayout();
         }
 
         private void FileListView_ItemSelectionChanged(object? sender, EventArgs e)

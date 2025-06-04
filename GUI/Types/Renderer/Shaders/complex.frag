@@ -95,20 +95,6 @@ uniform sampler2D g_tColor; // SrgbRead(true)
 uniform sampler2D g_tNormal;
 uniform sampler2D g_tTintMask;
 
-#if (F_SECONDARY_UV == 1) || (F_FORCE_UV2 == 1)
-    in vec2 vTexCoord2;
-    uniform bool g_bUseSecondaryUvForAmbientOcclusion = true;
-    #if F_TINT_MASK
-        uniform bool g_bUseSecondaryUvForTintMask = true;
-    #endif
-    #if F_DETAIL_TEXTURE > 0
-        uniform bool g_bUseSecondaryUvForDetailMask = true;
-    #endif
-    #if F_SELF_ILLUM == 1
-        uniform bool g_bUseSecondaryUvForSelfIllum = false;
-    #endif
-#endif
-
 #if defined(foliage_vfx_common)
     in vec3 vFoliageParamsOut;
 #endif
@@ -129,20 +115,20 @@ uniform sampler2D g_tTintMask;
     #define csgo_generic_blend
 #endif
 
-#if (defined(simple_blend_common) || defined(csgo_generic_blend) || defined(vr_standard_blend_vfx) || defined(environment_blend_vfx))
+#if (defined(simple_blend_common) || defined(csgo_generic_blend) || defined(vr_standard_vfx_blend) || defined(environment_blend_vfx))
     #if !defined(steampal_2way_blend_mask_vfx) // blending without vertex paint
         in vec4 vColorBlendValues;
     #endif
     uniform sampler2D g_tLayer2Color; // SrgbRead(true)
     uniform sampler2D g_tLayer2NormalRoughness;
-    uniform vec4 g_vTexCoordScale2 = vec4(1.0);
+    uniform vec2 g_vTexCoordScale2 = vec2(1.0);
 
     #define terrain_blend_common
 #endif
 
 #if defined(vr_skin_vfx)
     uniform sampler2D g_tCombinedMasks;
-    uniform vec4 g_vTransmissionColor = vec4(0.74902, 0.231373, 0.011765, 0.0);
+    uniform vec3 g_vTransmissionColor = vec3(0.74902, 0.231373, 0.011765);
     uniform float g_flMouthInteriorBrightnessScale = 1.0;
 #endif
 
@@ -159,6 +145,20 @@ uniform sampler2D g_tTintMask;
 #define selfillum ((F_SELF_ILLUM == 1 && (defined(generic_vfx) || defined(complex_vfx_common) || defined(csgo_vertexlitgeneric_vfx) || defined(vr_skin_vfx))) || defined(csgo_unlitgeneric_vfx))
 #define blendMod2x (F_BLEND_MODE == 3) || defined(csgo_decalmodulate_vfx)
 
+#if (F_SECONDARY_UV == 1) || (F_FORCE_UV2 == 1)
+    in vec2 vTexCoord2;
+    uniform bool g_bUseSecondaryUvForAmbientOcclusion = true;
+    #if F_TINT_MASK
+        uniform bool g_bUseSecondaryUvForTintMask = true;
+    #endif
+    #if F_DETAIL_TEXTURE > 0
+        uniform bool g_bUseSecondaryUvForDetailMask = true;
+    #endif
+    #if (selfillum)
+        uniform bool g_bUseSecondaryUvForSelfIllum = false;
+    #endif
+#endif
+
 #if (alphatest)
     uniform float g_flAlphaTestReference = 0.5;
 #endif
@@ -174,8 +174,8 @@ uniform sampler2D g_tTintMask;
     uniform float g_flSelfIllumAlbedoFactor = 0.0;
     uniform float g_flSelfIllumBrightness = 0.0;
     uniform float g_flSelfIllumScale = 1.0;
-    uniform vec4 g_vSelfIllumScrollSpeed = vec4(0.0);
-    uniform vec4 g_vSelfIllumTint = vec4(1.0);
+    uniform vec2 g_vSelfIllumScrollSpeed = vec2(0.0);
+    uniform vec3 g_vSelfIllumTint = vec3(1.0);
 
     vec3 GetStandardSelfIllumination(float flSelfIllumMask, vec3 vAlbedo)
     {
@@ -185,7 +185,7 @@ uniform sampler2D g_tTintMask;
 #endif
 
 #if defined(csgo_glass_vfx)
-    uniform vec4 g_flTranslucencyRemap = vec4(0.0, 1.0, 0.0, 0.0);
+    uniform vec2 g_flTranslucencyRemap = vec2(0.0, 1.0);
 #endif
 
 #if (_uniformMetalness)
@@ -234,12 +234,12 @@ uniform sampler2D g_tTintMask;
 
 #if defined(vr_standard_vfx)
     #if (F_HIGH_QUALITY_GLOSS == 1)
-        #define VEC2_ROUGHNESS
+        #define ANISO_ROUGHNESS
         uniform sampler2D g_tNormal2;
         uniform sampler2D g_tGloss;
     #endif
 
-    #if defined(vr_standard_blend_vfx)
+    #if defined(vr_standard_vfx_blend)
 
         #if (F_SPECULAR == 1)
             // uniform sampler2D g_tColor1;
@@ -278,7 +278,7 @@ uniform sampler2D g_tTintMask;
 #endif
 
 #if (F_ANISOTROPIC_GLOSS == 1) // complex, csgo_character
-    #define VEC2_ROUGHNESS
+    #define ANISO_ROUGHNESS
     uniform sampler2D g_tAnisoGloss;
 #endif
 
@@ -308,7 +308,7 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
 #if defined(terrain_blend_common)
     vec2 texCoordB = texCoord * g_vTexCoordScale2.xy;
 
-    #if defined(vr_standard_blend_vfx)
+    #if defined(vr_standard_vfx_blend)
         vec4 color2 = texture(VR_STANDARD_Color2, texCoordB);
         vec4 normalTexture2 = normalTexture;
         #if (F_BLEND_NORMALS == 1)
@@ -347,7 +347,7 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
         #endif
 
         blendFactor = ApplyBlendModulation(blendFactor, blendModTexel.r, softnessPaint);
-    #elif (defined(vr_standard_blend_vfx))
+    #elif (defined(vr_standard_vfx_blend))
         float blendFactor = vColorBlendValues.r;
         vec4 blendModTexel = texture(g_tLayer1RevealMask, texCoordB);
 
@@ -491,15 +491,15 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
         mat.NormalMap = DecodeHemiOctahedronNormal(normalTexture.rg);
     #endif
 
-#if defined(VEC2_ROUGHNESS)
+#if defined(ANISO_ROUGHNESS)
     #if (F_ANISOTROPIC_GLOSS == 1)
-        mat.RoughnessTex = texture(g_tAnisoGloss, texCoord).rg;
+        mat.RoughnessTex.xy = texture(g_tAnisoGloss, texCoord).rg;
     #endif
     #if defined(vr_standard_vfx) && (F_HIGH_QUALITY_GLOSS == 1)
         mat.RoughnessTex.xy = texture(g_tGloss, texCoord).ag;
     #endif
 #else
-    mat.RoughnessTex = normalTexture.b;
+    mat.RoughnessTex.xy = normalTexture.bb;
 #endif
 
 
@@ -535,7 +535,7 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
     #if defined(csgo_character_vfx)
         mat.ClothMask = metalnessTexture.b * (1.0 - metalnessTexture.g);
     #elif defined(csgo_weapon_vfx)
-        mat.RoughnessTex = metalnessTexture.r;
+        mat.RoughnessTex.xy = metalnessTexture.rr;
     #endif
 #elif (_uniformMetalness)
     mat.Metalness = g_flMetalness;
@@ -565,7 +565,7 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
     mat.ClothMask = 1.0;
 #endif
 
-    mat.Roughness = AdjustRoughnessByGeometricNormal(mat.RoughnessTex, mat.GeometricNormal);
+    AdjustRoughnessByGeometricNormal(mat);
 
 #if defined(csgo_character_vfx)
     #if (F_EYEBALLS == 1)
@@ -618,7 +618,7 @@ MaterialProperties_t GetMaterial(vec2 texCoord, vec3 vertexNormals)
     mat.DiffuseAO = vec3(mat.AmbientOcclusion);
     mat.SpecularAO = mat.AmbientOcclusion;
 
-#if defined(VEC2_ROUGHNESS)
+#if defined(ANISO_ROUGHNESS)
     CalculateAnisotropicTangents(mat);
 #endif
 
@@ -636,13 +636,13 @@ void main()
     MaterialProperties_t mat = GetMaterial(texCoord, vertexNormal);
     outputColor.a = mat.Opacity;
 
-    LightingTerms_t lighting = InitLighting();
+    LightingTerms_t lighting;
 
 #if (unlit)
     outputColor.rgb = mat.Albedo + mat.IllumColor;
 #else
-    CalculateDirectLighting(lighting, mat);
-    CalculateIndirectLighting(lighting, mat);
+
+    lighting = CalculateLighting(mat);
 
     // Combining pass
 
@@ -683,7 +683,11 @@ void main()
     outputColor = vec4(mix(vec3(0.5), gammaOutput, vec3(outputColor.a)), outputColor.a);
 #endif
 
-    if (HandleMaterialRenderModes(mat, outputColor))
+    if (HandleMaterialRenderModes(outputColor, mat))
+    {
+        //
+    }
+    else if (HandleUVRenderModes(outputColor, mat, g_tColor, vTexCoordOut, vLightmapUVScaled))
     {
         //
     }
@@ -700,7 +704,7 @@ void main()
 #if (D_BAKED_LIGHTING_FROM_LIGHTMAP == 1)
     else if (g_iRenderMode == renderMode_LightmapShadows)
     {
-        #if (LightmapGameVersionNumber >= 2)
+        #if (S_LIGHTMAP_VERSION_MINOR >= 2)
             vec4 dlsh = texture(g_tDirectLightShadows, vLightmapUVScaled);
             outputColor = vec4(vec3(1.0 - dlsh.x) + vec3(1.0 - min3(dlsh.yzw)) * vec3(0.5, 0.5, 0), 1.0);
         #endif

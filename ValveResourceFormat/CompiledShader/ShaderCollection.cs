@@ -4,38 +4,40 @@ using System.Collections;
 
 namespace ValveResourceFormat.CompiledShader;
 
-public class ShaderCollection : IEnumerable<ShaderFile>, IDisposable
+public class ShaderCollection : IEnumerable<VfxProgramData>, IDisposable
 {
-    public ShaderFile Features
+    public VfxProgramData Features
         => Get(VcsProgramType.Features);
-    public ShaderFile Vertex
+    public VfxProgramData Vertex
         => Get(VcsProgramType.VertexShader);
-    public ShaderFile Geometry
+    public VfxProgramData Geometry
         => Get(VcsProgramType.GeometryShader);
-    public ShaderFile Domain
+    public VfxProgramData Domain
         => Get(VcsProgramType.DomainShader);
-    public ShaderFile Hull
+    public VfxProgramData Hull
         => Get(VcsProgramType.HullShader);
-    public ShaderFile Pixel
+    public VfxProgramData Pixel
         => Get(VcsProgramType.PixelShader);
-    public ShaderFile Compute
+    public VfxProgramData Compute
         => Get(VcsProgramType.ComputeShader);
-    public ShaderFile PixelShaderRenderState
+    public VfxProgramData PixelShaderRenderState
         => Get(VcsProgramType.PixelShaderRenderState);
-    public ShaderFile Raytracing
+    public VfxProgramData Raytracing
         => Get(VcsProgramType.RaytracingShader);
+    public VfxProgramData Mesh
+        => Get(VcsProgramType.MeshShader);
 
-    private readonly Dictionary<VcsProgramType, ShaderFile> shaders = new((int)VcsProgramType.Undetermined);
+    private readonly Dictionary<VcsProgramType, VfxProgramData> shaders = new((int)VcsProgramType.Undetermined);
 
-    public void Add(ShaderFile shaderFile)
+    public void Add(VfxProgramData program)
     {
-        if (!shaders.TryAdd(shaderFile.VcsProgramType, shaderFile))
+        if (!shaders.TryAdd(program.VcsProgramType, program))
         {
-            throw new ArgumentException($"Shader of type {shaderFile.VcsProgramType} already exists in this collection.");
+            throw new ArgumentException($"Shader of type {program.VcsProgramType} already exists in this collection.");
         }
     }
 
-    public ShaderFile Get(VcsProgramType type)
+    public VfxProgramData Get(VcsProgramType type)
     {
         if (shaders.TryGetValue(type, out var shader))
         {
@@ -45,7 +47,7 @@ public class ShaderCollection : IEnumerable<ShaderFile>, IDisposable
         return null;
     }
 
-    public IEnumerator<ShaderFile> GetEnumerator()
+    public IEnumerator<VfxProgramData> GetEnumerator()
     {
         return shaders.Values.GetEnumerator();
     }
@@ -55,7 +57,7 @@ public class ShaderCollection : IEnumerable<ShaderFile>, IDisposable
         return ((IEnumerable)shaders.Values).GetEnumerator();
     }
 
-    public static ShaderCollection FromEnumerable(IEnumerable<ShaderFile> shaders)
+    public static ShaderCollection FromEnumerable(IEnumerable<VfxProgramData> shaders)
     {
         var collection = new ShaderCollection();
 

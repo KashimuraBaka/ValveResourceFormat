@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO.Hashing;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using GUI.Utils;
 using OpenTK.Graphics.OpenGL;
@@ -48,17 +49,20 @@ namespace GUI.Types.Renderer
                 return GetErrorMaterial();
             }
 
+            Span<byte> valueSpan = stackalloc byte[1];
             var hash = new XxHash3(StringToken.MURMUR2SEED);
-            hash.Append(Encoding.ASCII.GetBytes(name));
+            hash.Append(MemoryMarshal.AsBytes(name.AsSpan()));
 
             if (shaderArguments != null)
             {
                 foreach (var (key, value) in shaderArguments)
                 {
                     hash.Append(NewLineArray);
-                    hash.Append(Encoding.ASCII.GetBytes(key));
+                    hash.Append(MemoryMarshal.AsBytes(key.AsSpan()));
                     hash.Append(NewLineArray);
-                    hash.Append(Encoding.ASCII.GetBytes(value.ToString(CultureInfo.InvariantCulture)));
+
+                    valueSpan[0] = value;
+                    hash.Append(valueSpan);
                 }
             }
 
@@ -340,23 +344,6 @@ namespace GUI.Types.Renderer
             _ => throw new NotImplementedException($"Unsupported texture format {vformat}")
         };
 
-        static readonly string[] NonMaterialUniforms =
-        [
-            "g_bExperimentalLightsEnabled",
-            "g_iRenderMode",
-            "g_flTime",
-            "g_flSunShadowBias",
-            "g_vCameraPositionWs",
-            "g_vLightmapUvScale",
-            "g_vEnvMapSizeConstants",
-            "g_vClearColor",
-            "g_vGradientFogBiasAndScale",
-            "g_vGradientFogColor_Opacity",
-            "g_vCubeFog_Offset_Scale_Bias_Exponent",
-            "g_vCubeFog_Height_Offset_Scale_Exponent_Log2Mip",
-            "g_vCubeFogCullingParams_ExposureBias_MaxOpacity",
-        ];
-
         static readonly string[] ReservedTextures = Enum.GetNames<ReservedTextureSlots>();
 
         public void SetDefaultMaterialParameters(RenderMaterial mat)
@@ -371,12 +358,6 @@ namespace GUI.Types.Renderer
                 var index = uniform.Index;
                 var size = uniform.Size;
 
-                if (NonMaterialUniforms.Contains(name)
-                    || name.Contains("LightProbeVolume", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
                 if (!name.StartsWith("g_", StringComparison.Ordinal) && !name.StartsWith("F_", StringComparison.Ordinal))
                 {
                     continue;
@@ -388,7 +369,7 @@ namespace GUI.Types.Renderer
                 }
 
                 var isTexture = type is ActiveUniformType.Sampler2D or ActiveUniformType.SamplerCube;
-                var isVector = type == ActiveUniformType.FloatVec4;
+                var isVector = type is ActiveUniformType.FloatVec4 or ActiveUniformType.FloatVec3 or ActiveUniformType.FloatVec2;
                 var isScalar = type == ActiveUniformType.Float;
                 var isBoolean = type == ActiveUniformType.Bool;
                 var isInteger = type is ActiveUniformType.Int or ActiveUniformType.UnsignedInt;

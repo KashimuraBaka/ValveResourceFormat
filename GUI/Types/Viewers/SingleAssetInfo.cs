@@ -7,8 +7,7 @@ using GUI.Controls;
 using GUI.Utils;
 using SteamDatabase.ValvePak;
 using ValveKeyValue;
-
-#nullable disable
+using ValveResourceFormat.IO;
 
 namespace GUI.Types.Viewers
 {
@@ -25,8 +24,17 @@ namespace GUI.Types.Viewers
             {
                 var path = Path.Join(folder, "readonly_tools_asset_info.bin");
 
+                if (!File.Exists(path)) // Check parent folder if trying to load asset info in /maps/
+                {
+                    path = Path.Join(Path.GetDirectoryName(folder), "readonly_tools_asset_info.bin");
+                }
+
                 guiContext.ToolsAssetInfo = new ValveResourceFormat.ToolsAssetInfo.ToolsAssetInfo();
-                guiContext.ToolsAssetInfo.Read(path);
+
+                if (File.Exists(path))
+                {
+                    guiContext.ToolsAssetInfo.Read(path);
+                }
             }
 
             if (!guiContext.ToolsAssetInfo.Files.TryGetValue(filePath, out var assetInfo))
@@ -41,6 +49,31 @@ namespace GUI.Types.Viewers
                         assetInfo = assetInfoTemp;
                         break;
                     }
+                }
+            }
+
+            // If we didn't find exact match in the tools info, try to find the same file without the "_c" suffix
+            if (assetInfo == null && filePath.EndsWith(GameFileLoader.CompiledFileSuffix, StringComparison.Ordinal))
+            {
+                var filePathUncompiled = filePath[..^2];
+
+                if (!guiContext.ToolsAssetInfo.Files.TryGetValue(filePathUncompiled, out assetInfo))
+                {
+                    var gameRootPath = string.Concat(Path.GetFileName(folder), "/", filePathUncompiled);
+
+                    foreach (var (filePathTemp, assetInfoTemp) in guiContext.ToolsAssetInfo.Files)
+                    {
+                        if (assetInfoTemp.SearchPathsGameRoot.Exists(f => f.Filename == gameRootPath))
+                        {
+                            filePath = filePathTemp;
+                            assetInfo = assetInfoTemp;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    filePath = filePathUncompiled;
                 }
             }
 
@@ -131,7 +164,7 @@ namespace GUI.Types.Viewers
                 ReadOnly = true,
                 AllowUserToAddRows = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                DataSource = new BindingSource(new BindingList<FileReference>(referencedBy), null),
+                DataSource = new BindingSource(new BindingList<FileReference>(referencedBy), null!),
             };
 
             tab.Controls.Add(referencedContorl);

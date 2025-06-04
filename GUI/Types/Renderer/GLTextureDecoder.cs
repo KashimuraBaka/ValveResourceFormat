@@ -218,7 +218,7 @@ class GLTextureDecoder : IHardwareTextureDecoder, IDisposable
             [textureType] = 1,
         });
 
-        GL.UseProgram(shader.Program);
+        shader.Use();
 
         shader.SetTexture(0, "g_tInputTexture", inputTexture);
         shader.SetUniform2("g_vViewportSize", new System.Numerics.Vector2(blockWidth, blockHeight));
@@ -307,11 +307,11 @@ class GLTextureDecoder : IHardwareTextureDecoder, IDisposable
 
     public static string GetTextureTypeDefine(TextureTarget target) => target switch
     {
-        TextureTarget.Texture2D => "TYPE_TEXTURE2D",
-        TextureTarget.Texture3D => "TYPE_TEXTURE3D",
-        TextureTarget.Texture2DArray => "TYPE_TEXTURE2DARRAY",
-        TextureTarget.TextureCubeMap => "TYPE_TEXTURECUBEMAP",
-        TextureTarget.TextureCubeMapArray => "TYPE_TEXTURECUBEMAPARRAY",
+        TextureTarget.Texture2D => "S_TYPE_TEXTURE2D",
+        TextureTarget.Texture3D => "S_TYPE_TEXTURE3D",
+        TextureTarget.Texture2DArray => "S_TYPE_TEXTURE2DARRAY",
+        TextureTarget.TextureCubeMap => "S_TYPE_TEXTURECUBEMAP",
+        TextureTarget.TextureCubeMapArray => "S_TYPE_TEXTURECUBEMAPARRAY",
         _ => throw new UnexpectedMagicException("Unsupported texture type", (int)target, target.ToString())
     };
 }

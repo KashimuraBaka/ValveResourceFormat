@@ -1,4 +1,3 @@
-using GUI.Utils;
 using ValveResourceFormat;
 
 namespace GUI.Types.ParticleRenderer.Operators
@@ -29,7 +28,7 @@ namespace GUI.Types.ParticleRenderer.Operators
                 var currentValue = particle.ModifyVectorBySetMethod(particles, OutputField, value, setMethod);
                 var initialValue = particle.GetVector(OutputField);
 
-                value = MathUtils.Lerp(lerp, initialValue, currentValue);
+                value = Vector3.Lerp(initialValue, currentValue, lerp);
 
                 particle.SetVector(OutputField, value);
             }

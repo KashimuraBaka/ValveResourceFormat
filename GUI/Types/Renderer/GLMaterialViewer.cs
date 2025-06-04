@@ -1,6 +1,8 @@
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
+using GUI.Forms;
 using GUI.Types.Viewers;
 using GUI.Utils;
 using ValveResourceFormat.IO;
@@ -118,19 +120,7 @@ namespace GUI.Types.Renderer
                 }
             }
 
-            if (node == null)
-            {
-                var assembly = Assembly.GetExecutingAssembly();
-                using var stream = assembly.GetManifestResourceStream($"GUI.Utils.env_cubemap.vmdl_c");
-
-                using var cubemapResource = new ValveResourceFormat.Resource()
-                {
-                    FileName = "env_cubemap.vmdl_c"
-                };
-                cubemapResource.Read(stream);
-
-                node = new ModelSceneNode(Scene, (Model)cubemapResource.DataBlock);
-            }
+            node ??= CreateEnvCubemapSphere(Scene);
 
             foreach (var renderable in node.RenderableMeshes)
             {
@@ -140,41 +130,60 @@ namespace GUI.Types.Renderer
             return node;
         }
 
+        public static ModelSceneNode CreateEnvCubemapSphere(Scene scene)
+        {
+            var node = new ModelSceneNode(scene, (Model)CubemapResource.Value.DataBlock);
+            return node;
+        }
+
+        public static Lazy<ValveResourceFormat.Resource> CubemapResource = new(() =>
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream($"GUI.Utils.env_cubemap.vmdl_c");
+            var resource = new ValveResourceFormat.Resource()
+            {
+                FileName = "env_cubemap.vmdl_c"
+            };
+
+            resource.Read(stream);
+            return resource;
+        });
+
         private void OnShadersButtonClick(object s, EventArgs e)
         {
             var material = (Material)Resource.DataBlock;
-
-            var shaders = GuiContext.FileLoader.LoadShader(material.ShaderName);
-
             var featureState = ShaderDataProvider.GetMaterialFeatureState(material);
 
-            AddZframeTab(shaders.Vertex);
-            AddZframeTab(shaders.Pixel);
+            var loadingTabPage = new TabPage(material.ShaderName);
+            var loadingFile = new LoadingFile();
+            loadingTabPage.Controls.Add(loadingFile);
+            Tabs.TabPages.Add(loadingTabPage);
+            Tabs.SelectTab(loadingTabPage);
 
-            void AddZframeTab(ValveResourceFormat.CompiledShader.ShaderFile stage)
+            var viewer = new CompiledShader();
+
+            try
             {
-                var result = ShaderDataProvider.GetStaticConfiguration_ForFeatureState(shaders.Features, stage, featureState);
+                var shaders = GuiContext.FileLoader.LoadShader(material.ShaderName);
 
-                var zframeTab = new TabPage($"{stage.VcsProgramType} Static[{result.ZFrameId}]");
+                var tabPage = viewer.Create(
+                    shaders,
+                    Path.GetFileNameWithoutExtension(material.ShaderName.AsSpan()),
+                    ValveResourceFormat.CompiledShader.VcsProgramType.Features,
+                    featureState
+                );
+                tabPage.Text = material.ShaderName;
+                Tabs.TabPages.Add(tabPage);
+                viewer = null;
 
-                try
-                {
-                    var zframeRichTextBox = new CompiledShader.ZFrameRichTextBox(Tabs, stage, shaders, result.ZFrameId);
-                    zframeTab.Controls.Add(zframeRichTextBox);
+                Tabs.SelectTab(tabPage);
+            }
+            finally
+            {
+                viewer?.Dispose();
 
-                    using var zFrame = stage.GetZFrameFile(result.ZFrameId);
-                    var gpuSourceTab = CompiledShader.CreateDecompiledTabPage(shaders, stage, zFrame, 0, $"{stage.VcsProgramType} Source[0]");
-
-                    Tabs.Controls.Add(zframeTab);
-                    Tabs.TabPages.Add(gpuSourceTab);
-                    Tabs.SelectTab(gpuSourceTab);
-
-                    zframeTab = null;
-                }
-                finally
-                {
-                    zframeTab?.Dispose();
-                }
+                Tabs.TabPages.Remove(loadingTabPage);
+                loadingTabPage.Dispose();
             }
         }
 
@@ -187,7 +196,7 @@ namespace GUI.Types.Renderer
 
             var button = new Button
             {
-                Text = "Open shader zframe",
+                Text = "Decompile shader",
                 AutoSize = true,
             };
 

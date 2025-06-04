@@ -1,6 +1,6 @@
 namespace GUI.Types.Renderer
 {
-    internal readonly struct AABB
+    internal readonly struct AABB : IEquatable<AABB>
     {
         public readonly Vector3 Min;
         public readonly Vector3 Max;
@@ -95,9 +95,13 @@ namespace GUI.Types.Renderer
             return new AABB(min, max);
         }
 
-        public override string ToString()
+        public override readonly string ToString()
         {
             return $"AABB [({Min.X},{Min.Y},{Min.Z}) -> ({Max.X},{Max.Y},{Max.Z}))";
         }
+
+        public readonly bool Equals(AABB other) => Min.Equals(other.Min) && Max.Equals(other.Max);
+        public override readonly bool Equals(object? obj) => obj is AABB other && Equals(other);
+        public override readonly int GetHashCode() => HashCode.Combine(Min.X, Min.Y, Min.Z, Max.X, Max.Y, Max.Z);
     }
 }

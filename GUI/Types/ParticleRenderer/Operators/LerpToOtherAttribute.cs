@@ -1,4 +1,3 @@
-using GUI.Utils;
 using ValveResourceFormat;
 
 namespace GUI.Types.ParticleRenderer.Operators
@@ -30,7 +29,7 @@ namespace GUI.Types.ParticleRenderer.Operators
                     foreach (ref var particle in particles.Current)
                     {
                         var interp = interpolation.NextNumber(ref particle, particleSystemState);
-                        var blend = MathUtils.Lerp(interp, particle.GetVector(FieldOutput), particle.GetVector(FieldInput));
+                        var blend = Vector3.Lerp(particle.GetVector(FieldOutput), particle.GetVector(FieldInput), interp);
                         particle.SetVector(FieldOutput, blend);
                     }
                 }
@@ -39,7 +38,7 @@ namespace GUI.Types.ParticleRenderer.Operators
                     foreach (ref var particle in particles.Current)
                     {
                         var interp = interpolation.NextNumber(ref particle, particleSystemState);
-                        var blend = MathUtils.Lerp(interp, particle.GetScalar(FieldOutput), particle.GetScalar(FieldInput));
+                        var blend = float.Lerp(particle.GetScalar(FieldOutput), particle.GetScalar(FieldInput), interp);
                         particle.SetScalar(FieldOutput, blend);
                     }
                 }

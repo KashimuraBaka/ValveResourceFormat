@@ -380,6 +380,18 @@ namespace GUI.Types.Viewers
 
         private static void AddByteViewControl(ValveResourceFormat.Resource resource, Block block, TabPage blockTab)
         {
+            resource.Reader.BaseStream.Position = block.Offset;
+            var input = resource.Reader.ReadBytes((int)block.Size);
+
+            var textSpan = ByteViewer.GetTextFromBytes(input.AsSpan());
+
+            if (!textSpan.IsEmpty)
+            {
+                var textBox = CodeTextBox.Create(System.Text.Encoding.UTF8.GetString(textSpan));
+                blockTab.Controls.Add(textBox);
+                return;
+            }
+
             var bv = new System.ComponentModel.Design.ByteViewer
             {
                 Dock = DockStyle.Fill
@@ -388,8 +400,7 @@ namespace GUI.Types.Viewers
 
             Program.MainForm.Invoke((MethodInvoker)(() =>
             {
-                resource.Reader.BaseStream.Position = block.Offset;
-                bv.SetBytes(resource.Reader.ReadBytes((int)block.Size));
+                bv.SetBytes(input);
             }));
         }
 
@@ -401,14 +412,19 @@ namespace GUI.Types.Viewers
 
                 try
                 {
-                    var shaderTabs = viewer.SetResourceBlockTabControl(blockTab, shaderBlock.Shaders);
+                    var tabPage = viewer.Create(
+                        shaderBlock.Shaders,
+                        Path.GetFileNameWithoutExtension(resource.FileName.AsSpan()),
+                        ValveResourceFormat.CompiledShader.VcsProgramType.Features
+                    );
 
-                    foreach (var shaderFile in shaderBlock.Shaders)
+                    foreach (Control control in tabPage.Controls)
                     {
-                        shaderTabs.CreateShaderFileTab(shaderBlock.Shaders, shaderFile.VcsProgramType);
+                        blockTab.Controls.Add(control);
                     }
 
                     viewer = null;
+                    tabPage.Dispose();
                 }
                 finally
                 {
@@ -418,6 +434,7 @@ namespace GUI.Types.Viewers
                 return;
             }
 
+            var text = block.ToString();
             var language = CodeTextBox.HighlightLanguage.KeyValues;
 
             if (resource.ResourceType == ResourceType.PanoramaLayout && block.Type == BlockType.DATA)
@@ -433,7 +450,7 @@ namespace GUI.Types.Viewers
                 language = CodeTextBox.HighlightLanguage.JS;
             }
 
-            var textBox = new CodeTextBox(block.ToString(), language);
+            var textBox = CodeTextBox.Create(text, language);
             blockTab.Controls.Add(textBox);
         }
 
@@ -444,7 +461,7 @@ namespace GUI.Types.Viewers
                 case ResourceType.Material:
                     var vmatTab = IViewer.AddContentTab(resTabs, "Reconstructed vmat", new MaterialExtract(resource).ToValveMaterial());
                     var textBox = (CodeTextBox)vmatTab.Controls[0];
-                    Task.Run(() => textBox.Text = new MaterialExtract(resource, vrfGuiContext.FileLoader).ToValveMaterial().ReplaceLineEndings());
+                    Task.Run(() => textBox.Text = new MaterialExtract(resource, vrfGuiContext.FileLoader).ToValveMaterial());
                     break;
 
                 case ResourceType.EntityLump:
@@ -484,21 +501,6 @@ namespace GUI.Types.Viewers
                             IViewer.AddContentTab(resTabs, "Reconstructed vsnap", new SnapshotExtract(resource).ToValveSnap());
                         }
 
-                        break;
-                    }
-
-                case ResourceType.Shader:
-                    {
-                        var collectionBlock = resource.GetBlockByType(BlockType.SPRV)
-                            ?? resource.GetBlockByType(BlockType.DXBC)
-                            ?? resource.GetBlockByType(BlockType.DATA);
-
-                        var extract = new ShaderExtract((SboxShader)collectionBlock)
-                        {
-                            SpirvCompiler = CompiledShader.SpvToHlsl
-                        };
-
-                        IViewer.AddContentTab<Func<string>>(resTabs, extract.GetVfxFileName(), extract.ToVFX, true);
                         break;
                     }
             }

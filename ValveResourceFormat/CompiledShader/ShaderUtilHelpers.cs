@@ -1,6 +1,6 @@
+using System.Collections.Frozen;
 using System.IO;
 using ValveResourceFormat.Serialization.VfxEval;
-using static ValveResourceFormat.CompiledShader.ShaderDataReader;
 
 #nullable disable
 
@@ -93,6 +93,7 @@ namespace ValveResourceFormat.CompiledShader
 
         public static VcsProgramType ComputeVcsProgramType(string abbrev)
         {
+            // When adding new types make sure to add a small shader file to the tests folder
             return abbrev switch
             {
                 "features" => VcsProgramType.Features,
@@ -104,12 +105,14 @@ namespace ValveResourceFormat.CompiledShader
                 "hs" => VcsProgramType.HullShader,
                 "ds" => VcsProgramType.DomainShader,
                 "rtx" => VcsProgramType.RaytracingShader,
+                "ms" => VcsProgramType.MeshShader,
                 _ => VcsProgramType.Undetermined
             };
         }
 
         public static string ComputeVcsProgramType(VcsProgramType type)
         {
+            // When adding new types make sure to add a small shader file to the tests folder
             return type switch
             {
                 VcsProgramType.Features => "features",
@@ -121,6 +124,7 @@ namespace ValveResourceFormat.CompiledShader
                 VcsProgramType.HullShader => "hs",
                 VcsProgramType.DomainShader => "ds",
                 VcsProgramType.RaytracingShader => "rtx",
+                VcsProgramType.MeshShader => "ms",
                 _ => throw new ShaderParserException($"Unknown VCS program type {type}")
             };
         }
@@ -281,19 +285,6 @@ namespace ValveResourceFormat.CompiledShader
             return bytestring.Trim();
         }
 
-        public static void ShowIntArray(int[] ints0, int padding = 5, string label = null, bool hex = false)
-        {
-            var intsString = "";
-            foreach (var v in ints0)
-            {
-                var val = hex ? $"{v:x}" : $"{v}";
-                intsString += $"{(v != 0 ? val : "_")}".PadLeft(padding);
-            }
-            var labelstr = (label != null && hex) ? $"{label}(0x)" : $"{label}";
-            labelstr = label != null ? $"{labelstr,12} = " : "";
-            Console.WriteLine($"{labelstr}{intsString.Trim()}");
-        }
-
         public static string ParseDynamicExpression(byte[] dynExpDatabytes)
         {
             try
@@ -306,29 +297,83 @@ namespace ValveResourceFormat.CompiledShader
             }
         }
 
-        public class OutputFormatterTabulatedData
+        // This must be in sync with VfxVariableType without gaps
+        private static readonly string[] VfxVariableTypeToString = [
+            "void",
+            "float",
+            "float2",
+            "float3",
+            "float4",
+            "int",
+            "int2",
+            "int3",
+            "int4",
+            "bool",
+            "bool2",
+            "bool3",
+            "bool4",
+            "Sampler1D",
+            "Sampler2D",
+            "Sampler3D",
+            "SamplerCube",
+            "float3x3",
+            "float4x3",
+            "float4x4",
+            "struct",
+            "cbuffer",
+            "SamplerCube[]",
+            "Sampler2D[]",
+            "buffer",
+            "Sampler1D[]",
+            "Sampler3D[]",
+            "StructuredBuffer",
+            "ByteAddressBuffer",
+            "RWBuffer<float4>",
+            "RWTexture1D<float4>",
+            "RWTexture1D<float4>[]",
+            "RWTexture2D<float4>",
+            "RWTexture2D<float4>[]",
+            "RWTexture3D<float4>",
+            "RWStructuredBuffer",
+            "RWByteAddressBuffer",
+            "AppendStructuredBuffer",
+            "ConsumeStructuredBuffer",
+            "RWStructuredBufferWithCounter",
+            "ExternalDescriptorSet",
+            "string",
+            "SamplerStateIndex",
+            "Texture2DIndex",
+            "Texture3DIndex",
+            "TextureCubeIndex",
+            "Texture2DArrayIndex",
+            "TextureCubeArrayIndex",
+        ];
+
+        public static string GetVfxVariableTypeString(VfxVariableType type)
         {
-            public HandleOutputWrite OutputWriter { get; set; }
+            var t = (int)type;
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(t, VfxVariableTypeToString.Length, nameof(type));
 
-            public OutputFormatterTabulatedData(HandleOutputWrite OutputWriter = null)
-            {
-                this.OutputWriter = OutputWriter ?? ((x) => { Console.Write(x); });
-            }
+            return VfxVariableTypeToString[t];
+        }
 
+        internal class OutputFormatterTabulatedData(IndentedTextWriter OutputWriter)
+        {
             public void Write(string text)
             {
-                OutputWriter(text);
+                OutputWriter.Write(text);
             }
 
             public void WriteLine(string text)
             {
-                Write(text + "\n");
+                OutputWriter.WriteLine(text);
             }
 
             public void BreakLine()
             {
-                Write("\n");
+                OutputWriter.WriteLine();
             }
+
             private List<string> headerValues;
             private List<List<string>> tabulatedValues;
             private List<int> columnWidths;

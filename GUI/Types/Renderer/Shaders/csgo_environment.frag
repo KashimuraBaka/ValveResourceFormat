@@ -44,7 +44,7 @@ uniform sampler2D g_tNormal1;
 
 //#if (F_SECONDARY_AO == 1)
 //    uniform sampler2D g_tSecondaryAO;
-//    uniform vec4 g_vSecondaryAmbientOcclusionLevels = vec4(0, 0.5, 1, 0);
+//    uniform vec3 g_vSecondaryAmbientOcclusionLevels = vec3(0, 0.5, 1);
 //#endif
 
 uniform bool g_bMetalness1;
@@ -53,14 +53,14 @@ uniform int g_nColorCorrectionMode1 = 0;
 uniform float g_fTextureColorBrightness1 = 1.0;
 uniform float g_fTextureColorContrast1 = 1.0;
 uniform float g_fTextureColorSaturation1 = 1.0;
-uniform vec4 g_vTextureColorTint1 = vec4(1.0);
+uniform vec3 g_vTextureColorTint1 = vec3(1.0);
 uniform float g_fTextureNormalContrast1 = 1.0;
 uniform float g_fTextureRoughnessBrightness1 = 1.0;
 uniform float g_fTextureRoughnessContrast1 = 1.0;
 uniform float g_fTintMaskBrightness1 = 1.0;
 uniform float g_fTintMaskContrast1 = 1.0;
 uniform int g_nVertexColorMode1 = 0;
-uniform vec4 g_vAmbientOcclusionLevels1 = vec4(0, 0.5, 1, 0);
+uniform vec3 g_vAmbientOcclusionLevels1 = vec3(0, 0.5, 1);
 
 uniform float g_flHeightMapScale1 = 1.0;
 uniform float g_flHeightMapZeroPoint1 = 0.5;
@@ -72,6 +72,12 @@ uniform float g_flHeightMapZeroPoint1 = 0.5;
     uniform sampler2D g_tColor2; // SrgbRead(true)
     uniform sampler2D g_tHeight2;
     uniform sampler2D g_tNormal2;
+
+    #if (F_ENABLE_LAYER_3 == 1)
+        in vec4 vTexCoord3;
+
+        //
+    #endif
 
     #if (F_DETAIL_NORMAL == 1)
         uniform sampler2D g_tNormalDetail2;
@@ -96,14 +102,14 @@ uniform float g_flHeightMapZeroPoint1 = 0.5;
     uniform float g_fTextureColorBrightness2 = 1.0;
     uniform float g_fTextureColorContrast2 = 1.0;
     uniform float g_fTextureColorSaturation2 = 1.0;
-    uniform vec4 g_vTextureColorTint2 = vec4(1.0);
+    uniform vec3 g_vTextureColorTint2 = vec3(1.0);
     uniform float g_fTextureNormalContrast2 = 1.0;
     uniform float g_fTextureRoughnessBrightness2 = 1.0;
     uniform float g_fTextureRoughnessContrast2 = 1.0;
     uniform float g_fTintMaskBrightness2 = 1.0;
     uniform float g_fTintMaskContrast2 = 1.0;
     uniform int g_nVertexColorMode2 = 0;
-    uniform vec4 g_vAmbientOcclusionLevels2 = vec4(0, 0.5, 1, 0);
+    uniform vec3 g_vAmbientOcclusionLevels2 = vec3(0, 0.5, 1);
 
     uniform float g_flHeightMapScale2 = 1.0;
     uniform float g_flHeightMapZeroPoint2 = 0.5;
@@ -310,7 +316,7 @@ MaterialProperties_t GetMaterial(vec3 vertexNormals)
 
     // Normals and Roughness
     mat.NormalMap = DecodeHemiOctahedronNormal(normal.rg);
-    mat.RoughnessTex = normal.b;
+    mat.RoughnessTex = normal.bb;
 
     // Detail texture
     #if (F_DETAIL_NORMAL == 1)
@@ -323,7 +329,7 @@ MaterialProperties_t GetMaterial(vec3 vertexNormals)
     mat.Height = height.r;
     mat.Metalness = height.a;
 
-    mat.Roughness = AdjustRoughnessByGeometricNormal(mat.RoughnessTex, mat.GeometricNormal);
+    AdjustRoughnessByGeometricNormal(mat);
 
     mat.AmbientNormal = mat.Normal;
     mat.AmbientGeometricNormal = mat.GeometricNormal;
@@ -348,10 +354,7 @@ void main()
     // Get material
     MaterialProperties_t mat = GetMaterial(vertexNormal);
 
-    LightingTerms_t lighting = InitLighting();
-
-    CalculateDirectLighting(lighting, mat);
-    CalculateIndirectLighting(lighting, mat);
+    LightingTerms_t lighting = CalculateLighting(mat);
 
     // Combining pass
     ApplyAmbientOcclusion(lighting, mat);
@@ -365,7 +368,11 @@ void main()
 
     outputColor.rgb = combinedLighting;
 
-    if (HandleMaterialRenderModes(mat, outputColor))
+    if (HandleMaterialRenderModes(outputColor, mat))
+    {
+        //
+    }
+    else if (HandleUVRenderModes(outputColor, mat, g_tColor1, vTexCoord.xy, vLightmapUVScaled))
     {
         //
     }

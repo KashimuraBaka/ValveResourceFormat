@@ -16,7 +16,7 @@ namespace GUI.Types.ParticleRenderer.Operators
 
         public OpRemapParticleCountToScalar(ParticleDefinitionParser parse) : base(parse)
         {
-            OutputField = parse.ParticleField("m_nOutputField", OutputField);
+            OutputField = parse.ParticleField("m_nFieldOutput", OutputField);
             inputMin = parse.NumberProvider("m_flInputMin", inputMin);
             inputMax = parse.NumberProvider("m_flInputMax", inputMax);
             outputMin = parse.NumberProvider("m_flOutputMin", outputMin);
@@ -45,7 +45,7 @@ namespace GUI.Types.ParticleRenderer.Operators
                 var outputMin = this.outputMin.NextNumber(ref particle, particleSystemState);
                 var outputMax = this.outputMax.NextNumber(ref particle, particleSystemState);
 
-                var finalValue = MathUtils.Lerp(remappedDistance, outputMin, outputMax);
+                var finalValue = float.Lerp(outputMin, outputMax, remappedDistance);
 
                 finalValue = particle.ModifyScalarBySetMethod(particles, OutputField, finalValue, setMethod);
 

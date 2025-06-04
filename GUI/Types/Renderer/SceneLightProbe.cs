@@ -46,11 +46,46 @@ class SceneLightProbe : SceneNode
     /// </summary>
     public int IndoorOutdoorLevel { get; init; }
 
+    public float VoxelSize { get; set; }
+    public List<SceneNode> DebugGridSpheres { get; } = [];
+
     private int bufferHandle = -1;
+
 
     public SceneLightProbe(Scene scene, AABB bounds) : base(scene)
     {
         LocalBoundingBox = bounds;
+    }
+
+    public void CreateDebugGridSpheres()
+    {
+        var grid = LocalBoundingBox.Size / Math.Max(VoxelSize + 0.5f, 6f);
+        var model = GLMaterialViewer.CreateEnvCubemapSphere(Scene);
+
+        for (var x = 0; x < grid.X; x++)
+        {
+            for (var y = 0; y < grid.Y; y++)
+            {
+                for (var z = 0; z < grid.Z; z++)
+                {
+                    var sphere = new SceneNodeInstance(model);
+
+                    var transform = Matrix4x4.CreateTranslation(BoundingBox.Min + new Vector3(x, y, z) * VoxelSize + new Vector3(VoxelSize / 2f));
+                    var scale = 0.2f * (VoxelSize / 24f);
+                    // todo: rotation
+
+                    sphere.Transform = Matrix4x4.CreateScale(scale) * transform;
+                    sphere.LayerName = "LightProbeGrid" + Id;
+                    sphere.LayerEnabled = false;
+
+                    sphere.LightProbeBinding = this;
+                    sphere.EnvMapIds = EnvMapIds;
+                    DebugGridSpheres.Add(sphere);
+
+                    Scene.Add(sphere, true);
+                }
+            }
+        }
     }
 
     public override void Render(Scene.RenderContext context)
@@ -63,6 +98,14 @@ class SceneLightProbe : SceneNode
 
     public void SetGpuProbeData(bool isProbeAtlas)
     {
+#if false // for debugging
+        if (bufferHandle > -1)
+        {
+            GL.DeleteBuffer(bufferHandle);
+            bufferHandle = -1;
+        }
+#endif
+
         // Note: does not expect the data to change within the probe's lifetime
         if (bufferHandle == -1)
         {
@@ -73,13 +116,14 @@ class SceneLightProbe : SceneNode
 
             try
             {
-                Matrix4x4.Invert(Transform, out var worldToLocal);
-
-                var normalizedScale = Vector3.One / LocalBoundingBox.Size;
-                var normalizedMatrix = (Matrix4x4.CreateScale(normalizedScale) * worldToLocal) with
+                if (!Matrix4x4.Invert(Transform, out var worldToLocal))
                 {
-                    Translation = (worldToLocal.Translation - LocalBoundingBox.Min) * normalizedScale,
-                };
+                    throw new InvalidOperationException("Matrix invert failed");
+                }
+
+                var normalizedMatrix = worldToLocal *
+                    Matrix4x4.CreateTranslation(-LocalBoundingBox.Min) *
+                    Matrix4x4.CreateScale(Vector3.One / LocalBoundingBox.Size);
 
                 MemoryMarshal.Write(MemoryMarshal.Cast<float, byte>(data.AsSpan()[0..16]), in normalizedMatrix);
 

@@ -220,6 +220,11 @@ namespace GUI.Types.Renderer
 
                 foreach (var node in Scene.AllNodes)
                 {
+                    if (node.LayerName.StartsWith("LightProbeGrid", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
                     uniqueWorldLayers.Add(node.LayerName);
 
                     if (node is PhysSceneNode physSceneNode)
@@ -456,7 +461,10 @@ namespace GUI.Types.Renderer
                 return;
             }
 
-            Matrix4x4.Invert(sceneNode.Transform * Camera.CameraViewMatrix, out var transform);
+            if (!Matrix4x4.Invert(sceneNode.Transform * Camera.CameraViewMatrix, out var transform))
+            {
+                throw new InvalidOperationException("Matrix invert failed");
+            }
 
             FullScreenForm?.Close();
 

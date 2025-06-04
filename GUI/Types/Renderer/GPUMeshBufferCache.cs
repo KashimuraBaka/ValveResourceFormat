@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using OpenTK.Graphics.OpenGL;
 using ValveResourceFormat;
 using ValveResourceFormat.Blocks;
@@ -6,64 +7,40 @@ using ValveResourceFormat.ResourceTypes;
 
 namespace GUI.Types.Renderer
 {
-    class GPUMeshBufferCache
+    partial class GPUMeshBufferCache
     {
-        private readonly Dictionary<ulong, GPUMeshBuffers> gpuBuffers = [];
+        private readonly Dictionary<string, GPUMeshBuffers> gpuBuffers = [];
         private readonly Dictionary<VAOKey, int> vertexArrayObjects = [];
-        private QuadIndexBuffer? quadIndices;
-
-        [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-        public QuadIndexBuffer QuadIndices
-        {
-            get
-            {
-                quadIndices ??= new QuadIndexBuffer(65532);
-
-                return quadIndices;
-            }
-        }
-
-        private int emptyVAO = -1;
-        public int EmptyVAO
-        {
-            get
-            {
-                if (emptyVAO == -1)
-                {
-                    GL.CreateVertexArrays(1, out emptyVAO);
-                }
-
-                return emptyVAO;
-            }
-        }
 
         private struct VAOKey
         {
             public GPUMeshBuffers VBIB;
             public int Shader;
-            public uint VertexIndex;
-            public uint IndexIndex;
+            public int VertexIndex;
+            public int IndexIndex;
         }
 
-        public void CreateVertexIndexBuffers(ulong key, VBIB vbib)
+        public GPUMeshBuffers CreateVertexIndexBuffers(string vbibName, VBIB vbib)
         {
-            if (!gpuBuffers.ContainsKey(key))
+            if (!gpuBuffers.TryGetValue(vbibName, out var gpuVbib))
             {
-                var newGpuVbib = new GPUMeshBuffers(vbib);
-                gpuBuffers.Add(key, newGpuVbib);
+                gpuVbib = new GPUMeshBuffers(vbib);
+                gpuBuffers.Add(vbibName, gpuVbib);
             }
+
+            return gpuVbib;
         }
 
-        public int GetVertexArrayObject(ulong key, VertexDrawBuffer[] vertexBuffers, RenderMaterial material, uint idxIndex)
+        public int GetVertexArrayObject(string vbibName, VertexDrawBuffer[] vertexBuffers, RenderMaterial material, int idxIndex)
         {
             Debug.Assert(vertexBuffers != null && vertexBuffers.Length > 0);
 
-            var gpuVbib = gpuBuffers[key];
+            var gpuVbib = gpuBuffers[vbibName];
             var vaoKey = new VAOKey
             {
                 VBIB = gpuVbib,
                 Shader = material.Shader.Program,
-                VertexIndex = vertexBuffers[0].Id, // Probably good enough since every draw call will be creating new buffers
+                VertexIndex = vertexBuffers[0].Handle, // Probably good enough since every draw call will be creating new buffers
                 IndexIndex = idxIndex,
             };
 
@@ -73,7 +50,7 @@ namespace GUI.Types.Renderer
             }
 
             GL.CreateVertexArrays(1, out int newVaoHandle);
-            GL.VertexArrayElementBuffer(newVaoHandle, gpuVbib.IndexBuffers[idxIndex]);
+            GL.VertexArrayElementBuffer(newVaoHandle, idxIndex);
 
             // Workaround a bug in Intel drivers when mixing float and integer attributes
             // See https://gist.github.com/stefalie/e17a20a88a0fdbd97110611569a6605f for reference
@@ -81,10 +58,11 @@ namespace GUI.Types.Renderer
             GL.BindVertexArray(newVaoHandle);
 
             var bindingIndex = 0;
+            vertexBuffers = AddMissingAttributes(vertexBuffers, material.Shader);
 
             foreach (var curVertexBuffer in vertexBuffers)
             {
-                GL.VertexArrayVertexBuffer(newVaoHandle, bindingIndex, gpuVbib.VertexBuffers[curVertexBuffer.Id], 0, (int)curVertexBuffer.ElementSizeInBytes);
+                GL.VertexArrayVertexBuffer(newVaoHandle, bindingIndex, curVertexBuffer.Handle, 0, (int)curVertexBuffer.ElementSizeInBytes);
 
                 foreach (var attribute in curVertexBuffer.InputLayoutFields)
                 {
@@ -97,11 +75,11 @@ namespace GUI.Types.Renderer
                         if (!string.IsNullOrEmpty(matchingName))
                         {
                             insgElemName = matchingName;
-                            attributeLocation = GL.GetAttribLocation(material.Shader.Program, insgElemName switch
+                            attributeLocation = material.Shader.Attributes.GetValueOrDefault(insgElemName switch
                             {
                                 "vLightmapUVW" => "vLightmapUV",
                                 _ => insgElemName,
-                            });
+                            }, -1);
                         }
                     }
 
@@ -118,7 +96,7 @@ namespace GUI.Types.Renderer
                             attributeName += attribute.SemanticIndex;
                         }
 
-                        attributeLocation = GL.GetAttribLocation(material.Shader.Program, attributeName);
+                        attributeLocation = material.Shader.Attributes.GetValueOrDefault(attributeName, -1);
                     }
 
                     // Ignore this attribute if it is not found in the shader
@@ -140,6 +118,31 @@ namespace GUI.Types.Renderer
 
             vertexArrayObjects.Add(vaoKey, newVaoHandle);
             return newVaoHandle;
+        }
+
+        private VertexDrawBuffer[] AddMissingAttributes(VertexDrawBuffer[] vertexBuffers, Shader shader)
+        {
+            if (shader.Attributes.TryGetValue("vCOLOR", out var colorAttributeLocation)
+                        && !vertexBuffers.Any(vb => vb.InputLayoutFields.Any(f => f.SemanticName == "COLOR")))
+            {
+                var defaultColor = new VertexDrawBuffer
+                {
+                    Handle = VectorOneVertexBuffer,
+                    ElementSizeInBytes = 0, // required for the singular attribute to apply to all vertices
+                    InputLayoutFields =
+                    [
+                        new VBIB.RenderInputLayoutField
+                        {
+                            SemanticName = "COLOR",
+                            Format = DXGI_FORMAT.R32G32B32A32_FLOAT,
+                        },
+                    ],
+                };
+
+                vertexBuffers = [.. vertexBuffers, defaultColor];
+            }
+
+            return vertexBuffers;
         }
 
         private static void BindVertexAttrib(int vao, VBIB.RenderInputLayoutField attribute, int attributeLocation, int offset, int bindingIndex)
@@ -195,6 +198,10 @@ namespace GUI.Types.Renderer
 
                 case DXGI_FORMAT.R16G16B16A16_UNORM:
                     GL.VertexArrayAttribFormat(vao, attributeLocation, 4, VertexAttribType.UnsignedShort, true, offset);
+                    break;
+
+                case DXGI_FORMAT.R16G16B16A16_FLOAT:
+                    GL.VertexArrayAttribFormat(vao, attributeLocation, 4, VertexAttribType.HalfFloat, false, offset);
                     break;
 
                 case DXGI_FORMAT.R16G16_SNORM:

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows.Forms;
 using GUI.Controls;
 using GUI.Utils;
+using static GUI.Controls.CodeTextBox;
 
 namespace GUI.Types.Viewers
 {
@@ -9,9 +10,9 @@ namespace GUI.Types.Viewers
     {
         public TabPage Create(VrfGuiContext vrfGuiContext, Stream stream);
 
-        public static TabPage AddContentTab<T>(TabControl resTabs, string name, T content, bool preSelect = false)
+        public static TabPage AddContentTab<T>(TabControl resTabs, string name, T content, bool preSelect = false, HighlightLanguage highlightSyntax = HighlightLanguage.Default)
         {
-            string extract = string.Empty;
+            var extract = string.Empty;
             if (content is Func<string> exceptionless)
             {
                 try
@@ -29,7 +30,7 @@ namespace GUI.Types.Viewers
                 extract = content?.ToString() ?? string.Empty;
             }
 
-            var control = new CodeTextBox(extract);
+            var control = CodeTextBox.Create(extract, highlightSyntax);
             var tab = new TabPage(name);
             tab.Controls.Add(control);
             resTabs.TabPages.Add(tab);

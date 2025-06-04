@@ -16,14 +16,20 @@ namespace GUI.Types.Renderer
 
         [GeneratedRegex("^\\s*#include \"(?<IncludeName>[^\"]+)\"")]
         private static partial Regex RegexInclude();
-        [GeneratedRegex("^\\s*#define (?<ParamName>\\S+) (?<DefaultValue>\\S+)")]
+        [GeneratedRegex("^\\s*#define (?<ParamName>(?:renderMode|F|S|D)_\\S+) (?<DefaultValue>\\S+)")]
         private static partial Regex RegexDefine();
+
+#if DEBUG
+        [GeneratedRegex(@"defined\((?<Name>\w+)_vfx\)")]
+        private static partial Regex RegexIsVfxDefined();
+#endif
 
         // regex that detects "uniform samplerx sampler; // SrgbRead(true)"
         // accept whitespace in front
         [GeneratedRegex("^\\s*uniform sampler(?<SamplerType>\\S+) (?<SamplerName>\\S+);\\s*// SrgbRead\\(true\\)")]
         private static partial Regex RegexSamplerWithSrgbRead();
 
+        private readonly StringBuilder builder = new(1024);
         private int sourceFileNumber;
         public List<string> SourceFiles { get; } = [];
 
@@ -33,6 +39,7 @@ namespace GUI.Types.Renderer
 
         public void Reset()
         {
+            builder.Clear();
             sourceFileNumber = 0;
             SourceFiles.Clear();
 
@@ -45,7 +52,6 @@ namespace GUI.Types.Renderer
         {
             var isFirstLine = true;
             var resolvedIncludes = new HashSet<string>(4);
-            var builder = new StringBuilder();
 
             void AppendLineNumber(int a, int b)
             {
@@ -86,6 +92,8 @@ namespace GUI.Types.Renderer
                 SourceFileLines.Add(currentSourceLines);
 #endif
 
+                builder.EnsureCapacity(builder.Length + (int)stream.Length);
+
                 while ((line = reader.ReadLine()) != null)
                 {
                     lineNum++;
@@ -94,7 +102,7 @@ namespace GUI.Types.Renderer
                     {
                         if (line != ExpectedShaderVersion)
                         {
-                            throw new InvalidProgramException($"First line must be '{ExpectedShaderVersion}' in '{shaderFileToLoad}'");
+                            throw new ShaderCompilerException($"First line must be '{ExpectedShaderVersion}' in '{shaderFileToLoad}'");
                         }
 
                         if (isInclude)
@@ -196,6 +204,16 @@ namespace GUI.Types.Renderer
 
                             parsedData.SrgbSamplers.Add(samplerName);
                         }
+
+#if DEBUG
+                        // defined(shader_vfx)
+                        match = RegexIsVfxDefined().Match(line);
+                        if (match.Success)
+                        {
+                            var shaderName = match.Groups["Name"].Value;
+                            parsedData.ShaderVariants.Add(shaderName);
+                        }
+#endif
                     }
 
                     builder.Append(line);

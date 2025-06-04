@@ -42,9 +42,15 @@ namespace GUI
             ShowError((Exception)ex.ExceptionObject);
         }
 
-        private static void ShowError(Exception exception)
+        public static void ShowError(Exception exception)
         {
             Log.Error(nameof(Program), exception.ToString());
+
+            if (exception is GUI.Types.Renderer.ShaderLoader.ShaderCompilerException)
+            {
+                MessageBox.Show(exception.Message, "Failed to compile shader", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             MessageBox.Show(
                 $"{exception.Message}{Environment.NewLine}{Environment.NewLine}See console for more information.{Environment.NewLine}{Environment.NewLine}Try using latest dev build to see if the issue persists.{Environment.NewLine}Source 2 Viewer Version: {Application.ProductVersion[..16]}",

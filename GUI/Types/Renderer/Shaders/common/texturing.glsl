@@ -21,20 +21,6 @@ float CalculateGeometricRoughnessFactor(vec3 geometricNormal)
     return geometricRoughnessFactor;
 }
 
-float AdjustRoughnessByGeometricNormal( float roughness, vec3 geometricNormal )
-{
-    float geometricRoughnessFactor = CalculateGeometricRoughnessFactor(geometricNormal);
-
-    return max(roughness, geometricRoughnessFactor);
-}
-
-vec2 AdjustRoughnessByGeometricNormal( vec2 roughness, vec3 geometricNormal )
-{
-    float geometricRoughnessFactor = CalculateGeometricRoughnessFactor(geometricNormal);
-
-    return max(roughness, vec2(geometricRoughnessFactor));
-}
-
 float ApplyBlendModulation(float blendFactor, float blendMask, float blendSoftness)
 {
     float minb = max(0.0, blendMask - blendSoftness);
@@ -59,15 +45,9 @@ struct MaterialProperties_t
     float Metalness;
     vec3 Normal;
     vec3 NormalMap;
-
-#if defined(VEC2_ROUGHNESS)
     vec2 Roughness;
+    float IsometricRoughness;
     vec2 RoughnessTex;
-#else
-    float Roughness;
-    float RoughnessTex;
-#endif
-
     float AmbientOcclusion;
     float Height;
     vec3 DiffuseAO; // vec3 because Diffuse AO can be tinted
@@ -89,7 +69,7 @@ struct MaterialProperties_t
     float Curvature;
 #endif
 
-#if defined(VEC2_ROUGHNESS)
+#if defined(ANISO_ROUGHNESS)
     vec3 AnisotropicTangent;
     vec3 AnisotropicBitangent;
 #endif
@@ -110,13 +90,9 @@ void InitProperties(out MaterialProperties_t mat, vec3 GeometricNormal)
     mat.Normal = vec3(0.0);
     mat.NormalMap = vec3(0, 0, 1);
 
-#if defined(VEC2_ROUGHNESS)
     mat.Roughness = vec2(0.0);
+    mat.IsometricRoughness = 0.0;
     mat.RoughnessTex = vec2(0.0);
-#else
-    mat.Roughness = 0.0;
-    mat.RoughnessTex = 0.0;
-#endif
     mat.AmbientOcclusion = 1.0;
     mat.Height = 0.5;
     mat.DiffuseAO = vec3(1.0);
@@ -141,7 +117,7 @@ void InitProperties(out MaterialProperties_t mat, vec3 GeometricNormal)
     #endif
 #endif
 
-#if defined(VEC2_ROUGHNESS)
+#if defined(ANISO_ROUGHNESS)
     mat.AnisotropicTangent = vec3(0.0);
     mat.AnisotropicBitangent = vec3(0.0);
 #endif
@@ -155,13 +131,26 @@ void InitProperties(out MaterialProperties_t mat, vec3 GeometricNormal)
 }
 
 
+void AdjustRoughnessByGeometricNormal(inout MaterialProperties_t mat)
+{
+    const float MIN_ROUGHNESS = 0.0525;
+
+    float geometricRoughnessFactor = CalculateGeometricRoughnessFactor(mat.GeometricNormal);
+    geometricRoughnessFactor = max(geometricRoughnessFactor, MIN_ROUGHNESS);
+
+    vec2 geometricAdjusted = max(mat.RoughnessTex, vec2(geometricRoughnessFactor));
+
+    mat.Roughness = geometricAdjusted;
+}
+
+
 #if defined(vr_skin_vfx) || defined(vr_xen_foliage_vfx)
 #define DIFFUSE_AO_COLOR_BLEED
 #endif
 
 #if defined(DIFFUSE_AO_COLOR_BLEED)
 
-uniform vec4 g_vAmbientOcclusionColorBleed = vec4(0.4, 0.14902, 0.129412, 0.0);
+uniform vec3 g_vAmbientOcclusionColorBleed = vec3(0.4, 0.14902, 0.129412);
 
 void SetDiffuseColorBleed(inout MaterialProperties_t mat)
 {
@@ -173,17 +162,6 @@ void SetDiffuseColorBleed(inout MaterialProperties_t mat)
 }
 
 #endif
-
-float GetIsoRoughness(float Roughness)
-{
-    return Roughness;
-}
-
-float GetIsoRoughness(vec2 Roughness)
-{
-    return dot(Roughness, vec2(0.5));
-}
-
 
 //-------------------------------------------------------------------------
 //                              NORMALS
@@ -312,7 +290,7 @@ void applyDetailTexture(inout vec3 Albedo, inout vec3 NormalMap, vec2 detailMask
     uniform float g_flEdgeColorFalloff = 3.0;
     uniform float g_flEdgeColorMaxOpacity = 0.5;
     uniform float g_flEdgeColorThickness = 0.1;
-    uniform vec4 g_vEdgeColor;
+    uniform vec3 g_vEdgeColor;
     uniform float g_flRefractScale = 0.1;
 
     // todo: is this right?
@@ -331,7 +309,7 @@ void applyDetailTexture(inout vec3 Albedo, inout vec3 NormalMap, vec2 detailMask
 #if (F_CLOTH_SHADING == 1) && defined(csgo_character_vfx)
 
     uniform float g_flSheenScale = 0.667;
-    uniform vec4 g_flSheenTintColor = vec4(1.0);
+    uniform vec3 g_flSheenTintColor = vec3(1.0);
 
     vec3 ApplySheen(float reflectance, vec3 albedo, float clothMask)
     {
@@ -379,7 +357,11 @@ void applyDetailTexture(inout vec3 Albedo, inout vec3 NormalMap, vec2 detailMask
 #define renderMode_Metalness 0
 #define renderMode_ExtraParams 0
 
-bool HandleMaterialRenderModes(MaterialProperties_t mat, inout vec4 outputColor)
+#define renderMode_UvDensity 0
+#define renderMode_LightmapUvDensity 0
+#define renderMode_MipmapUsage 0
+
+bool HandleMaterialRenderModes(inout vec4 outputColor, MaterialProperties_t mat)
 {
     if (g_iRenderMode == renderMode_FullBright)
     {
@@ -419,12 +401,11 @@ bool HandleMaterialRenderModes(MaterialProperties_t mat, inout vec4 outputColor)
     }
     else if (g_iRenderMode == renderMode_Roughness)
     {
-        #if defined(VEC2_ROUGHNESS)
-            outputColor.rgb = SrgbGammaToLinear(vec3(mat.RoughnessTex.xy, 0.0));
+        #if defined(ANISO_ROUGHNESS)
+            outputColor.rgb = SrgbGammaToLinear(vec3(mat.Roughness.xy, 0.0));
         #else
-            outputColor.rgb = SrgbGammaToLinear(mat.RoughnessTex.xxx);
+            outputColor.rgb = SrgbGammaToLinear(mat.IsometricRoughness.xxx);
         #endif
-
         return true;
     }
     else if (g_iRenderMode == renderMode_Metalness)
@@ -438,5 +419,49 @@ bool HandleMaterialRenderModes(MaterialProperties_t mat, inout vec4 outputColor)
         return true;
     }
 
+    return false;
+}
+
+bool HandleUVRenderModes(inout vec4 outputColor, MaterialProperties_t mat, sampler2D representativeTexture, vec2 flUVs, vec3 vLightmapUVs)
+{
+    if (g_iRenderMode == renderMode_UvDensity || g_iRenderMode == renderMode_LightmapUvDensity)
+    {
+        outputColor.rgb = mat.Albedo;
+        vec2 uv = g_iRenderMode == renderMode_UvDensity ? flUVs : vLightmapUVs.xy;
+
+        ivec2 vDims = textureSize(representativeTexture, 0);
+
+        uint testVal = ((uv.x < 0) != (uv.y < 0)) ? 0 : 1;
+        uvec2 vUVInPixels = uvec2(abs(uv) * vDims.xy);
+        if (((vUVInPixels.x + vUVInPixels.y) & 1) == testVal)
+        {
+            outputColor.rgb *= 0.8;
+        }
+
+        uvec2 vUVIn16Pixels = vUVInPixels / 16;
+        if (((vUVIn16Pixels.x + vUVIn16Pixels.y) & 1) == testVal)
+        {
+            outputColor.rgb *= 0.5;
+        }
+
+        return true;
+    }
+    else if (g_iRenderMode == renderMode_MipmapUsage)
+    {
+        outputColor.rgb = mat.Albedo;
+
+        ivec2 vTexDimensions = textureSize(representativeTexture, 0);
+        float flMipLevel = textureQueryLod(representativeTexture, flUVs).y;
+        float flMipLevels = log2(max(vTexDimensions.x, vTexDimensions.y));
+
+        uint testVal = ((flUVs.x < 0) != (flUVs.y < 0)) ? 0 : 1;
+        uvec2 vUVInPixels = uvec2(abs(flUVs) * vTexDimensions.xy);
+        uvec2 vUVIn16Pixels = vUVInPixels / uint(8 * round(1 + flMipLevel));
+
+        float fIntensity = (((vUVIn16Pixels.x + vUVIn16Pixels.y) & 1) == testVal) ? .75 : .25f;
+        outputColor.rgb = mix(outputColor.rgb, vec3(1.0, flMipLevel / flMipLevels, 0.0), fIntensity);
+
+        return true;
+    }
     return false;
 }

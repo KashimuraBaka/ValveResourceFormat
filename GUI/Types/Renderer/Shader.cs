@@ -1,23 +1,25 @@
 using GUI.Utils;
 using OpenTK.Graphics.OpenGL;
 
-#nullable disable
-
 namespace GUI.Types.Renderer
 {
     class Shader
     {
         public string Name { get; init; }
         public int Program { get; set; }
-        public IReadOnlyDictionary<string, byte> Parameters { get; init; }
-        public HashSet<string> RenderModes { get; init; }
-        public HashSet<string> SrgbSamplers { get; init; }
+        public bool Loaded { get; private set; }
+        public required int[] ShaderObjects { get; init; }
+        public required IReadOnlyDictionary<string, byte> Parameters { get; init; }
+        public required HashSet<string> RenderModes { get; init; }
+        public required HashSet<string> SrgbSamplers { get; init; }
 
-        private readonly Dictionary<string, int> Uniforms = [];
+        private readonly Dictionary<string, (ActiveUniformType Type, int Location)> Uniforms = [];
         public RenderMaterial Default;
 
+        public readonly Dictionary<string, int> Attributes = [];
+
 #if DEBUG
-        public string FileName { get; init; }
+        public required string FileName { get; init; }
 #endif
 
         public Shader()
@@ -28,52 +30,116 @@ namespace GUI.Types.Renderer
 
         public int NameHash => Name.GetHashCode(StringComparison.OrdinalIgnoreCase);
 
+        public bool EnsureLoaded()
+        {
+            Loaded = true;
+
+            GL.GetProgram(Program, GetProgramParameterName.LinkStatus, out var linkStatus);
+
+            foreach (var obj in ShaderObjects)
+            {
+                GL.DetachShader(Program, obj);
+                GL.DeleteShader(obj);
+            }
+
+            if (linkStatus != 1)
+            {
+                return false;
+            }
+
+            StoreAttributeLocations();
+
+            return true;
+        }
+
+        public void Use()
+        {
+            if (!Loaded)
+            {
+                EnsureLoaded();
+            }
+
+            GL.UseProgram(Program);
+        }
+
         public IEnumerable<(string Name, int Index, ActiveUniformType Type, int Size)> GetAllUniformNames()
         {
+            var uniformBlockMemberIndices = new List<int>();
+
+            GL.GetProgram(Program, GetProgramParameterName.ActiveUniformBlocks, out var uniformBlockCount);
+
+            for (var i = 0; i < uniformBlockCount; i++)
+            {
+                GL.GetActiveUniformBlock(Program, i, ActiveUniformBlockParameter.UniformBlockActiveUniforms, out var activeUniformsCount);
+
+                var uniformIndices = new int[activeUniformsCount];
+                GL.GetActiveUniformBlock(Program, i, ActiveUniformBlockParameter.UniformBlockActiveUniformIndices, uniformIndices);
+                uniformBlockMemberIndices.AddRange(uniformIndices);
+            }
+
             GL.GetProgram(Program, GetProgramParameterName.ActiveUniforms, out var count);
 
-            Uniforms.EnsureCapacity(count);
+            Uniforms.EnsureCapacity(count - uniformBlockMemberIndices.Count);
 
             for (var i = 0; i < count; i++)
             {
+                if (uniformBlockMemberIndices.Contains(i))
+                {
+                    continue;
+                }
+
                 var uniformName = GL.GetActiveUniform(Program, i, out var size, out var uniformType);
                 var uniformLocation = GL.GetUniformLocation(Program, uniformName);
 
                 if (uniformLocation > -1)
                 {
-                    Uniforms[uniformName] = uniformLocation;
+                    Uniforms[uniformName] = (uniformType, uniformLocation);
                 }
 
                 yield return (uniformName, i, uniformType, size);
             }
         }
 
+        public void StoreAttributeLocations()
+        {
+            GL.GetProgram(Program, GetProgramParameterName.ActiveAttributes, out var attributeCount);
+
+            Attributes.EnsureCapacity(attributeCount);
+
+            for (var i = 0; i < attributeCount; i++)
+            {
+                GL.GetActiveAttrib(Program, i, 64, out var length, out var size, out var type, out var name);
+                var attribLocation = GL.GetAttribLocation(Program, name);
+                Attributes[name] = attribLocation;
+            }
+        }
+
         public int GetUniformLocation(string name)
         {
-            if (Uniforms.TryGetValue(name, out var value))
+            if (Uniforms.TryGetValue(name, out var locationType))
             {
-                return value;
+                return locationType.Location;
             }
 
-            value = GL.GetUniformLocation(Program, name);
+            var location = GL.GetUniformLocation(Program, name);
 
-            Uniforms[name] = value;
+            Uniforms[name] = (ActiveUniformType.FloatVec4, location);
 
-            return value;
+            return location;
         }
 
         public int GetUniformBlockIndex(string name)
         {
-            if (Uniforms.TryGetValue(name, out var value))
+            if (Uniforms.TryGetValue(name, out var locationType))
             {
-                return value;
+                return locationType.Location;
             }
 
-            value = GL.GetUniformBlockIndex(Program, name);
+            var location = GL.GetUniformBlockIndex(Program, name);
 
-            Uniforms[name] = value;
+            Uniforms[name] = (ActiveUniformType.FloatVec4, location);
 
-            return value;
+            return location;
         }
 
         public void SetUniform1(string name, float value)
@@ -129,6 +195,29 @@ namespace GUI.Types.Renderer
             if (uniformLocation > -1)
             {
                 GL.ProgramUniform4(Program, uniformLocation, value.X, value.Y, value.Z, value.W);
+            }
+        }
+
+        public void SetMaterialVector4Uniform(string name, Vector4 value)
+        {
+            if (Uniforms.TryGetValue(name, out var uniform) && uniform.Location > -1)
+            {
+                if (uniform.Type == ActiveUniformType.FloatVec3)
+                {
+                    GL.ProgramUniform3(Program, uniform.Location, value.X, value.Y, value.Z);
+                }
+                else if (uniform.Type is ActiveUniformType.FloatVec2)
+                {
+                    GL.ProgramUniform2(Program, uniform.Location, value.X, value.Y);
+                }
+                else if (uniform.Type == ActiveUniformType.FloatVec4)
+                {
+                    GL.ProgramUniform4(Program, uniform.Location, value.X, value.Y, value.Z, value.W);
+                }
+                else if (uniform.Type is ActiveUniformType.IntVec4 or ActiveUniformType.UnsignedIntVec4 or ActiveUniformType.BoolVec4)
+                {
+                    GL.ProgramUniform4(Program, uniform.Location, (uint)value.X, (uint)value.Y, (uint)value.Z, (uint)value.W);
+                }
             }
         }
 
@@ -188,7 +277,23 @@ namespace GUI.Types.Renderer
         }
 
 #if DEBUG
-        public void ClearUniformsCache() => Uniforms.Clear();
+        public void ReplaceWith(Shader shader)
+        {
+            GL.DeleteProgram(Program);
+
+            Loaded = false;
+            Program = shader.Program;
+
+            for (var i = 0; i < shader.ShaderObjects.Length; i++)
+            {
+                ShaderObjects[i] = shader.ShaderObjects[i];
+            }
+
+            RenderModes.Clear();
+            RenderModes.UnionWith(shader.RenderModes);
+
+            Uniforms.Clear();
+        }
 #endif
     }
 }

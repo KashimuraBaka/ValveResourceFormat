@@ -68,18 +68,14 @@ namespace GUI.Types.Renderer
 
         public void Add(SceneNode node, bool dynamic)
         {
-            if (dynamic)
-            {
-                dynamicNodes.Add(node);
-                DynamicOctree.Insert(node, node.BoundingBox);
-                node.Id = (uint)dynamicNodes.Count * 2 - 1;
-            }
-            else
-            {
-                staticNodes.Add(node);
-                StaticOctree.Insert(node, node.BoundingBox);
-                node.Id = (uint)staticNodes.Count * 2;
-            }
+            var (nodeList, octree, indexOffset) = dynamic
+                ? (dynamicNodes, DynamicOctree, 1u)
+                : (staticNodes, StaticOctree, 0u);
+
+            nodeList.Add(node);
+            node.Id = (uint)nodeList.Count * 2 - indexOffset;
+
+            octree.Insert(node, node.BoundingBox);
         }
 
         public SceneNode Find(uint id)
@@ -122,11 +118,21 @@ namespace GUI.Types.Renderer
                 node.Update(updateContext);
             }
 
+            if (OctreeDirty)
+            {
+                UpdateOctrees();
+                OctreeDirty = false;
+            }
+
             foreach (var node in dynamicNodes)
             {
                 var oldBox = node.BoundingBox;
                 node.Update(updateContext);
-                DynamicOctree.Update(node, oldBox, node.BoundingBox);
+
+                if (!oldBox.Equals(node.BoundingBox))
+                {
+                    DynamicOctree.Update(node, oldBox, node.BoundingBox);
+                }
             }
         }
 
@@ -431,7 +437,7 @@ namespace GUI.Types.Renderer
             GL.DepthMask(false);
             GL.Disable(EnableCap.CullFace);
 
-            GL.UseProgram(depthOnlyShader.Program);
+            depthOnlyShader.Use();
             GL.BindVertexArray(GuiContext.MeshBufferCache.EmptyVAO);
 
             var maxTests = 128;
@@ -544,14 +550,21 @@ namespace GUI.Types.Renderer
         {
             foreach (var renderer in AllNodes)
             {
+                if (renderer.LayerName.StartsWith("LightProbeGrid", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 renderer.LayerEnabled = layers.Contains(renderer.LayerName);
             }
 
-            if (!skipUpdate)
+            if (skipUpdate)
             {
-                UpdateOctrees();
+                OctreeDirty = false;
             }
         }
+
+        public bool OctreeDirty { get; set; }
 
         public void UpdateOctrees()
         {
@@ -721,7 +734,7 @@ namespace GUI.Types.Renderer
                 var lightingOrigin = node.LightingOrigin ?? Vector3.Zero;
                 if (node.LightingOrigin.HasValue)
                 {
-                    // in source2 this is a dynamic combo D_SPECULAR_CUBEMAP_STATIC=1, and i guess without a loop (similar to SCENE_CUBEMAP_TYPE=1)
+                    // in source2 this is a dynamic combo D_SPECULAR_CUBEMAP_STATIC=1, and i guess without a loop (similar to S_SCENE_CUBEMAP_TYPE=1)
                     node.EnvMaps = [.. node.EnvMaps.OrderBy((envMap) => Vector3.Distance(lightingOrigin, envMap.BoundingBox.Center))];
                 }
                 else
@@ -780,7 +793,10 @@ namespace GUI.Types.Renderer
 
         private void UpdateGpuEnvmapData(SceneEnvMap envMap, int index)
         {
-            Matrix4x4.Invert(envMap.Transform, out var invertedTransform);
+            if (!Matrix4x4.Invert(envMap.Transform, out var invertedTransform))
+            {
+                throw new InvalidOperationException("Matrix invert failed");
+            }
 
             LightingInfo.LightingData.EnvMapWorldToLocal[index] = invertedTransform;
             LightingInfo.LightingData.EnvMapBoxMins[index] = new Vector4(envMap.LocalBoundingBox.Min, 0);

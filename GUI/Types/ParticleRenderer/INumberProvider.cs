@@ -1,5 +1,4 @@
 using GUI.Types.ParticleRenderer.Utils;
-using GUI.Utils;
 using ValveResourceFormat;
 
 namespace GUI.Types.ParticleRenderer
@@ -80,7 +79,7 @@ namespace GUI.Types.ParticleRenderer
                 random = NumericBias.ApplyBias(random, biasParam, biasType);
             }
 
-            var value = MathUtils.Lerp(random, minRange, maxRange);
+            var value = float.Lerp(minRange, maxRange, random);
 
             if (hasRandomSignFlip && Random.Shared.Next(0, 2) == 0) // 50% chance to flip sign
             {

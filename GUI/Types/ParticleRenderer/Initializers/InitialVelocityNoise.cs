@@ -1,5 +1,4 @@
 using GUI.Types.ParticleRenderer.Utils;
-using GUI.Utils;
 
 namespace GUI.Types.ParticleRenderer.Initializers
 {
@@ -27,7 +26,7 @@ namespace GUI.Types.ParticleRenderer.Initializers
             var min = outputMin.NextVector(ref particle, particleSystemState);
             var max = outputMax.NextVector(ref particle, particleSystemState);
 
-            particle.Velocity = MathUtils.Lerp(r, min, max);
+            particle.Velocity = Vector3.Lerp(min, max, r);
 
             return particle;
         }

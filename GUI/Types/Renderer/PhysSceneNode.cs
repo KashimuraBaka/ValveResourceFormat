@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Linq;
 using System.Runtime.InteropServices;
 using GUI.Utils;
 using ValveResourceFormat.IO;
@@ -298,7 +297,11 @@ namespace GUI.Types.Renderer
 
                 if (classname != null)
                 {
-                    physSceneNode.SetToolTexture(MapExtract.GetToolTextureForEntity(classname));
+                    var toolTexture = MapExtract.GetToolTextureForEntity(classname);
+                    if (!string.IsNullOrEmpty(toolTexture))
+                    {
+                        physSceneNode.SetToolTexture(toolTexture);
+                    }
                 }
                 else if (tooltexture != "nodraw")
                 {

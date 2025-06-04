@@ -7,10 +7,10 @@
 
 layout (location = 0) in vec3 vPOSITION;
 #include "common/compression.glsl"
-layout (location = 3) in vec2 vTEXCOORD;
-layout (location = 4) in vec4 vTEXCOORD1;
-layout (location = 5) in vec4 vTEXCOORD2;
-layout (location = 6) in vec4 vTEXCOORD3;
+layout (location = 6) in vec2 vTEXCOORD;
+layout (location = 7) in vec4 vTEXCOORD1;
+layout (location = 8) in vec4 vTEXCOORD2;
+layout (location = 9) in vec4 vTEXCOORD3;
 
 out vec3 vFragPosition;
 
@@ -43,18 +43,18 @@ uniform float g_flTexCoordRotate1;
 uniform float g_flTexCoordRotate2;
 uniform float g_flTexCoordRotate3;
 
-uniform vec4 g_vTexCoordOffset0 = vec4(0.0);
-uniform vec4 g_vTexCoordOffset1 = vec4(0.0);
-uniform vec4 g_vTexCoordOffset2 = vec4(0.0);
-uniform vec4 g_vTexCoordOffset3 = vec4(0.0);
+uniform vec2 g_vTexCoordOffset0;
+uniform vec2 g_vTexCoordOffset1;
+uniform vec2 g_vTexCoordOffset2;
+uniform vec2 g_vTexCoordOffset3;
 
-uniform vec4 g_vTexCoordScroll0 = vec4(0.0);
-uniform vec4 g_vTexCoordScroll1 = vec4(0.0);
-uniform vec4 g_vTexCoordScroll2 = vec4(0.0);
-uniform vec4 g_vTexCoordScroll3 = vec4(0.0);
+uniform vec2 g_vTexCoordScroll0;
+uniform vec2 g_vTexCoordScroll1;
+uniform vec2 g_vTexCoordScroll2;
+uniform vec2 g_vTexCoordScroll3;
 
 
-vec2 getTexCoord(float scale, float rotation, vec4 offset, vec4 scroll) {
+vec2 getTexCoord(float scale, float rotation, vec2 offset, vec2 scroll) {
 
     //Transform degrees to radians
     float r = radians(rotation);

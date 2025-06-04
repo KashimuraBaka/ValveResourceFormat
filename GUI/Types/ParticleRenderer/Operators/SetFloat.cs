@@ -1,4 +1,3 @@
-using GUI.Utils;
 using ValveResourceFormat;
 
 namespace GUI.Types.ParticleRenderer.Operators
@@ -31,7 +30,7 @@ namespace GUI.Types.ParticleRenderer.Operators
                 var currentValue = particle.ModifyScalarBySetMethod(particles, OutputField, value, setMethod);
                 var initialValue = particle.GetScalar(OutputField);
 
-                value = MathUtils.Lerp(lerp, initialValue, currentValue);
+                value = float.Lerp(initialValue, currentValue, lerp);
 
                 particle.SetScalar(OutputField, value);
             }

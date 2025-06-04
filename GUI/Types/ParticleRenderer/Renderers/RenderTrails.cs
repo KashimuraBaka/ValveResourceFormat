@@ -119,7 +119,7 @@ namespace GUI.Types.ParticleRenderer.Renderers
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             }
 
-            GL.UseProgram(shader.Program);
+            shader.Use();
 
             GL.BindVertexArray(vaoHandle);
 
@@ -131,7 +131,11 @@ namespace GUI.Types.ParticleRenderer.Renderers
             shader.SetUniform1("uOverbrightFactor", (float)overbrightFactor.NextNumber());
 
             // Create billboarding rotation (always facing camera)
-            Matrix4x4.Decompose(modelViewMatrix, out _, out var modelViewRotation, out _);
+            if (!Matrix4x4.Decompose(modelViewMatrix, out _, out var modelViewRotation, out _))
+            {
+                throw new InvalidOperationException("Matrix decompose failed");
+            }
+
             modelViewRotation = Quaternion.Inverse(modelViewRotation);
             var billboardMatrix = Matrix4x4.CreateFromQuaternion(modelViewRotation);
 
@@ -188,9 +192,9 @@ namespace GUI.Types.ParticleRenderer.Renderers
 
                     // Lerp frame coords and size
                     var subFrameTime = frame % 1.0f;
-                    var offset = MathUtils.Lerp(subFrameTime, currentImage.CroppedMin, currentImage.UncroppedMin);
-                    var scale = MathUtils.Lerp(subFrameTime, currentImage.CroppedMax - currentImage.CroppedMin,
-                        currentImage.UncroppedMax - currentImage.UncroppedMin);
+                    var offset = Vector2.Lerp(currentImage.CroppedMin, currentImage.UncroppedMin, subFrameTime);
+                    var scale = Vector2.Lerp(currentImage.CroppedMax - currentImage.CroppedMin,
+                        currentImage.UncroppedMax - currentImage.UncroppedMin, subFrameTime);
 
                     shader.SetUniform2("uUvOffset", offset);
                     shader.SetUniform2("uUvScale", scale * new Vector2(finalTextureScaleU, finalTextureScaleV));
